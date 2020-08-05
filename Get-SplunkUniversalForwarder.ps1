@@ -9,7 +9,22 @@ $CONST_MENU = @(
 )
 
 function Get-SplunkUFurls($url){
-    $response = Invoke-RestMethod $url 
+<#
+    .SYNOPSIS
+        Gets Splunk Universal Forwarder URL and returns available packages.
+
+    .DESCRIPTION
+        Gets Splunk Universal Forwarder URL and returns available packages based on a regular expression and contents found in "data-link".
+        The data collected includes: url, version, os, and file_name.
+        This data is stored in an array of hashtables. 
+
+    .INPUTS
+        Provide url in String form.
+
+    .OUTPUTS
+        Outputs array of hastables. Hashtable includes url, version, os and file_name of each result from Splunk url.
+#>
+    $response = (New-Object System.Net.WebClient).DownloadString([System.Uri]$url)
     $urls = $response | select-string -pattern  'data-link="(?<url>https://[^"]+)' -AllMatches | ForEach-Object {$_.matches.groups | Where-Object Name -eq 'url'} | Select-Object -ExpandProperty Value
     $urls | Select-String -Pattern "https:\/\/.+(?=releases)releases\/(?<version>[^\/]+)\/(?<os>[^\/]+)\/(?<file_name>[^\/]+)" -AllMatches | ForEach-Object {
         @{
@@ -22,6 +37,21 @@ function Get-SplunkUFurls($url){
 }
 
 function Get-SplunkUFBinaries($url_list){
+<#
+    .SYNOPSIS
+        Gets Splunk Binary Based on provided list.
+
+    .DESCRIPTION
+        Gets Splunk Universal Forwarder Binary provided as an Input.
+        Iterates through Arrayof hashtables to output each binary based on provided url, version, os, and file_name.
+        Written to disk in the following form: "version/os/file_name"
+
+    .INPUTS
+        Provide Array of Hashtables with url, version, os, and file_name.
+
+    .OUTPUTS
+        Outputs file to disk based on input provided. Write's output when file download is complete.
+#>
     foreach ($hashtable_url in $url_list){
         $out_dir = "$($hashtable_url.version)/$($hashtable_url.os)"
         $url = [System.Uri]$hashtable_url.url
@@ -33,7 +63,20 @@ function Get-SplunkUFBinaries($url_list){
     }    
 }
 
-function Write-Host-Options($options){
+function Write-HostOptions($options){
+<#
+    .SYNOPSIS
+        Outputs options based on provided Array. Requests for selection from Read-Host, validates range, and outputs result.
+
+    .DESCRIPTION
+        Outputs options based on provided Array. Requests for selection from Read-Host, validates range, and outputs result.
+
+    .INPUTS
+        Provide Array of options to be output.
+
+    .OUTPUTS
+        Outputs result based on user selection.
+#>
     ForEach ($opt in $options){
         Write-Host "[$($options.IndexOf($opt) + 1)] - $opt" 
     }
@@ -54,13 +97,8 @@ function Write-Host-Options($options){
     until($?)
 }
 
-function Select-SplunkList($filters){
-
-}
-
-
 function main(){
-    $menu_selection = Write-Host-Options($CONST_MENU)
+    $menu_selection = Write-HostOptions($CONST_MENU)
     
     $current_splunk_list = Get-SplunkUFurls($CONST_CURRENT_URL)
     $all_splunk_list = Get-SplunkUFurls($CONST_LEGACY_URL) + $current_splunk_list
@@ -70,13 +108,13 @@ function main(){
             $get_output = $current_splunk_list
         }
         2{
-            $version = Write-Host-Options(($all_splunk_list).version | Sort-Object -Unique -Descending)
+            $version = Write-HostOptions(($all_splunk_list).version | Sort-Object -Unique -Descending)
             $get_output = $all_splunk_list | Where-Object {$_.version -eq $version}        
         }
         3{
-            $os = Write-Host-Options($all_splunk_list.os | Sort-Object -Unique -Descending) 
-            $version = Write-Host-Options(($all_splunk_list | Where-Object os -eq $os).version | Sort-Object -Unique -Descending)
-            $package = Write-Host-Options(($all_splunk_list | Where-Object {($_.os -eq $os) -and ($_.version -eq $version)}).file_name | Sort-Object -Unique -Descending)
+            $os = Write-HostOptions($all_splunk_list.os | Sort-Object -Unique -Descending) 
+            $version = Write-HostOptions(($all_splunk_list | Where-Object os -eq $os).version | Sort-Object -Unique -Descending)
+            $package = Write-HostOptions(($all_splunk_list | Where-Object {($_.os -eq $os) -and ($_.version -eq $version)}).file_name | Sort-Object -Unique -Descending)
             $get_output = $all_splunk_list | Where-Object {($_.os -eq $os) -and ($_.version -eq $version) -and ($_.file_name -eq $package)}        
         }
         4{
