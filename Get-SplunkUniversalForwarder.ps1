@@ -36,12 +36,12 @@ function Write-Host-Options($options){
     }
     do{
         try{
-            [ValidatePattern('^\d+$')]$selection = Read-Host "Please select an option"
-            if ($selection -gt 0 -and $selection -lt ($options.Length + 1)){
+            [ValidatePattern('^[0-9]+$')]$selection = Read-Host "Please select an option"
+            if ($selection -In 0..$($options.Length + 1)){
                 return $options[$selection - 1]
             }
             else{
-                throw "Invalid Selection"
+                throw "Invalid Selection: $selection. Options Length: $($options.Length)"
             }
         }
         catch{
