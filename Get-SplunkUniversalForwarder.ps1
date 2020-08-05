@@ -25,7 +25,7 @@ function Get-SplunkUFBinaries($url_list){
     foreach ($hashtable_url in $url_list){
         $out_file = "$($hashtable_url.version)/$($hashtable_url.os)/$($hashtable_url.file_name)"
         New-Item -Path $out_file -Force | Out-Null
-        Invoke-RestMethod $hashtable_url.url.ToString() -OutFile $out_file
+        (New-Object System.Net.WebClient).DownloadFile($hashtable_url.url.ToString(), $out_file)
         Write-Host  "WRITING FILE: $out_file"
     }    
 }
