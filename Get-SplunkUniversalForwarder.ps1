@@ -58,8 +58,8 @@ function Get-SplunkUFBinaries($url_list){
 
         New-Item -ItemType Directory -Path $out_dir -Force | Out-Null
         $out_file = Join-Path -Path $(Convert-Path $out_dir) -ChildPath $($hashtable_url.file_name)
-        (New-Object System.Net.WebClient).DownloadFile($url, $out_file)
         Write-Host  "WRITING FILE: $out_file"
+        (New-Object System.Net.WebClient).DownloadFile($url, $out_file)
     }    
 }
 
@@ -99,9 +99,17 @@ function Write-HostOptions($options){
 
 function main(){
     $menu_selection = Write-HostOptions($CONST_MENU)
+    $all_splunk_list = @()
+    $current_splunk_list = @()
     
-    $current_splunk_list = Get-SplunkUFurls($CONST_CURRENT_URL)
-    $all_splunk_list = Get-SplunkUFurls($CONST_LEGACY_URL) + $current_splunk_list
+    Get-SplunkUFurls($CONST_CURRENT_URL) | ForEach-Object {
+        $all_splunk_list += $_
+        $current_splunk_list += $_
+    }
+
+    Get-SplunkUFurls($CONST_LEGACY_URL) | ForEach-Object {
+        $all_splunk_list += $_
+    }
     
     switch($CONST_MENU.IndexOf($menu_selection) + 1){
         1{
