@@ -13,7 +13,7 @@ function Get-SplunkUFurls($url){
     $urls = $response | select-string -pattern  'data-link="(?<url>https://[^"]+)' -AllMatches | ForEach-Object {$_.matches.groups | Where-Object Name -eq 'url'} | Select-Object -ExpandProperty Value
     $urls | Select-String -Pattern "https:\/\/.+(?=releases)releases\/(?<version>[^\/]+)\/(?<os>[^\/]+)\/(?<file_name>[^\/]+)" -AllMatches | ForEach-Object {
         @{
-            'url' = $_;
+            'url' = $_.tostring();
             'version' = $_.Matches.groups[1].value;
             'os' = $_.Matches.groups[2].value;
             'file_name' = $_.Matches.groups[3].value
@@ -24,9 +24,11 @@ function Get-SplunkUFurls($url){
 function Get-SplunkUFBinaries($url_list){
     foreach ($hashtable_url in $url_list){
         $out_dir = "$($hashtable_url.version)/$($hashtable_url.os)"
-        $out_file = "$($out_dir)/$($hashtable_url.file_name)"
+        $url = [System.Uri]$hashtable_url.url
+
         New-Item -ItemType Directory -Path $out_dir -Force | Out-Null
-        (New-Object System.Net.WebClient).DownloadFile($hashtable_url.url.ToString(), $out_file)
+        $out_file = Join-Path -Path $(Convert-Path $out_dir) -ChildPath $($hashtable_url.file_name)
+        (New-Object System.Net.WebClient).DownloadFile($url, $out_file)
         Write-Host  "WRITING FILE: $out_file"
     }    
 }
