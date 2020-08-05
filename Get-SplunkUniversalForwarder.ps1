@@ -29,11 +29,48 @@ function Get-SplunkUFurls($url){
     $urls | Select-String -Pattern "https:\/\/.+(?=releases)releases\/(?<version>[^\/]+)\/(?<os>[^\/]+)\/(?<file_name>[^\/]+)" -AllMatches | ForEach-Object {
         @{
             'url' = $_.tostring();
+            'md5_url' = (-join ($_.tostring(),".md5"))
             'version' = $_.Matches.groups[1].value;
             'os' = $_.Matches.groups[2].value;
             'file_name' = $_.Matches.groups[3].value
         }
     }
+}
+
+function Test-MD5Hash{
+<#
+    .SYNOPSIS
+        Tests hash of provided file path against provided file hash.
+
+    .DESCRIPTION
+        Uses Get-FileHash to return MD5 hash of file_path. 
+        Compares the uppercase results of file_path and provided md5hash.
+        Return True if the match, False if they do not. 
+
+    .PARAMETER Path
+        File Path we are comparing hash to. 
+    
+    .PARAMETER md5hash
+        MD5 hash being compared to Path
+
+    .OUTPUTS
+        True - Hashes match / False - Hashes do not match
+#>
+    param(
+        [Parameter(Mandatory=$true)][String]$Path,
+        [Parameter(Mandatory=$true)][String]$md5hash
+    )
+    $file_md5hash = (Get-FileHash -Path $Path -Algorithm "MD5").Hash.ToUpper()
+    $check_md5hash = $md5hash.ToUpper()
+
+    if($file_md5hash.Equals($check_md5hash)){
+        $result = $true
+    }
+    else{
+        $result = $false
+    }
+    
+    return $result
 }
 
 function Get-SplunkUFBinaries($url_list){
@@ -55,15 +92,29 @@ function Get-SplunkUFBinaries($url_list){
     foreach ($hashtable_url in $url_list){
         $out_dir = "$($hashtable_url.version)/$($hashtable_url.os)"
         $url = [System.Uri]$hashtable_url.url
-
+        $md5 = ((New-Object System.Net.WebClient).DownloadString([System.Uri]$hashtable_url.md5_url) | Select-String -Pattern "\=\s([a-fA-Z0-9]{32})$" -AllMatches).Matches.Groups[1].Value
+        
+        Write-Host "DOWNLOADING: $url"
         New-Item -ItemType Directory -Path $out_dir -Force | Out-Null
         $out_file = Join-Path -Path $(Convert-Path $out_dir) -ChildPath $($hashtable_url.file_name)
-        Write-Host  "WRITING FILE: $out_file"
+        Write-Host "WRITING FILE: $out_file"
+        Write-Host "SPLUNK MD5: $md5"
+        
         (New-Object System.Net.WebClient).DownloadFile($url, $out_file)
+
+        if (Test-MD5Hash -path $out_file -md5hash $md5){
+            Write-Host -ForegroundColor Green "MD5 PASS: $md5"
+        }
+        else{
+            Write-Host -ForegroundColor Red "MD5 FAIL: $md5"
+            Write-Host -ForegroundColor Yellow "REMOVING: $out_file"
+            Remove-Item -Force $out_file
+        }
+        
     }    
 }
 
-function Write-HostOptions($options){
+function Write-HostOptions{
 <#
     .SYNOPSIS
         Outputs options based on provided Array. Requests for selection from Read-Host, validates range, and outputs result.
@@ -71,12 +122,20 @@ function Write-HostOptions($options){
     .DESCRIPTION
         Outputs options based on provided Array. Requests for selection from Read-Host, validates range, and outputs result.
 
-    .INPUTS
+    .PARAMETER title
+        Provide a title to return
+
+    .PARAMETER options
         Provide Array of options to be output.
 
     .OUTPUTS
         Outputs result based on user selection.
 #>
+    param(
+        [Parameter(Mandatory=$true)][System.String]$title,
+        [Parameter(Mandatory=$true)][System.Array]$options
+    )
+    Write-Host $title
     ForEach ($opt in $options){
         Write-Host "[$($options.IndexOf($opt) + 1)] - $opt" 
     }
@@ -98,7 +157,7 @@ function Write-HostOptions($options){
 }
 
 function main(){
-    $menu_selection = Write-HostOptions($CONST_MENU)
+    $menu_selection = Write-HostOptions -title "Please choose how to proceed." -options $CONST_MENU 
     $all_splunk_list = @()
     $current_splunk_list = @()
     
@@ -116,13 +175,13 @@ function main(){
             $get_output = $current_splunk_list
         }
         2{
-            $version = Write-HostOptions(($all_splunk_list).version | Sort-Object -Unique -Descending)
+            $version = Write-HostOptions -title "Select Version" -options $(($all_splunk_list).version | Sort-Object -Unique -Descending)
             $get_output = $all_splunk_list | Where-Object {$_.version -eq $version}        
         }
         3{
-            $os = Write-HostOptions($all_splunk_list.os | Sort-Object -Unique -Descending) 
-            $version = Write-HostOptions(($all_splunk_list | Where-Object os -eq $os).version | Sort-Object -Unique -Descending)
-            $package = Write-HostOptions(($all_splunk_list | Where-Object {($_.os -eq $os) -and ($_.version -eq $version)}).file_name | Sort-Object -Unique -Descending)
+            $os = Write-HostOptions -title "Select Operating System" -options $($all_splunk_list.os | Sort-Object -Unique -Descending)
+            $version = Write-HostOptions -title "Select Version" -options $(($all_splunk_list | Where-Object os -eq $os).version | Sort-Object -Unique -Descending)
+            $package = Write-HostOptions -title "Select Package" -options $(($all_splunk_list | Where-Object {($_.os -eq $os) -and ($_.version -eq $version)}).file_name | Sort-Object -Unique -Descending)
             $get_output = $all_splunk_list | Where-Object {($_.os -eq $os) -and ($_.version -eq $version) -and ($_.file_name -eq $package)}        
         }
         4{
